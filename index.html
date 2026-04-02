@@ -54,8 +54,9 @@
 </div>
 
 <script>
-    // This is your dedicated Worker URL from the screenshot
-    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
+    // Point to your worker. 
+    // We add a specific header to tell the worker "I want JSON, not the HTML file"
+    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/";
     
     let mangaData = [];
     let chartInstance = null;
@@ -71,41 +72,43 @@
             </div>`;
 
         try {
-            // Force fetch from the Worker directly
+            // We fetch the root, but the Worker script should be programmed to 
+            // check the request and return Notion data if it's an API call.
             const resp = await fetch(WORKER_URL, { 
                 method: 'GET',
-                headers: { 'Accept': 'application/json' }
+                headers: { 
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest' 
+                }
             });
 
-            if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
-
-            const contentType = resp.headers.get("content-type") || "";
-            if (!contentType.includes("application/json")) {
-                throw new Error("Worker returned HTML/Text. Check if your Worker script is deployed correctly.");
-            }
+            if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
 
             const data = await resp.json();
+            
             if (data.error) throw new Error(data.error);
 
             mangaData = (data.results || []).map(page => ({
                 id: page.id,
-                name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
-                status: page.properties.Status?.select?.name || "Plan to Read",
+                name: page.properties.Name?.title[0]?.plain_text || "Untitled",
+                status: page.properties.Status?.select?.name || "Reading",
                 ch: page.properties.Chapters?.number || 0 
             }));
 
             syncText.innerText = `✨ ${mangaData.length} items synced`;
             render();
         } catch (err) {
-            console.error(err);
+            console.error("Fetch failed:", err);
             grid.innerHTML = `
                 <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
-                    <p class="text-red-800 font-bold mb-1">Connection Failed</p>
+                    <p class="text-red-800 font-bold mb-1">Archive Connection Failed</p>
                     <p class="text-red-600 text-xs mb-4 italic">${err.message}</p>
-                    <div class="bg-white p-3 rounded text-[10px] text-gray-500">
-                        <b>Troubleshooting:</b><br>
-                        1. Visit <a href="${WORKER_URL}" target="_blank" class="underline text-blue-500">this link</a>. If you see your website again, the Worker is not running the Notion script.<br>
-                        2. Ensure <code>NOTION_TOKEN</code> is in the "Variables" tab of your Worker settings.
+                    <div class="bg-white p-3 rounded text-[10px] text-gray-500 leading-relaxed">
+                        <b>Current Status:</b> Your Worker is serving <code>index.html</code> instead of running the script.<br><br>
+                        <b>How to Fix:</b><br>
+                        1. In your <code>wrangler.jsonc</code>, change <code>"directory": "."</code> to <code>"directory": "public"</code>.<br>
+                        2. Move <code>index.html</code> into a new folder named <code>public</code>.<br>
+                        3. Ensure your <code>index.js</code> remains at the root of the project.
                     </div>
                 </div>
             `;
@@ -156,7 +159,9 @@
     }
 
     function updateChart() {
-        const ctx = document.getElementById("statusChart").getContext("2d");
+        const canvas = document.getElementById("statusChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
         const stats = mangaData.reduce((acc, m) => { 
             const s = m.status || "Other";
             acc[s] = (acc[s] || 0) + 1; 
@@ -170,13 +175,17 @@
                 labels: Object.keys(stats),
                 datasets: [{
                     data: Object.values(stats),
-                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB", "#D2B48C"]
+                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB", "#D2B48C"],
+                    borderWidth: 2, 
+                    borderColor: "#fff"
                 }]
             },
             options: { 
                 responsive: true, 
                 maintainAspectRatio: false, 
-                plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } },
+                plugins: { 
+                    legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 10, family: "Georgia" } } } 
+                },
                 cutout: "70%"
             }
         });
