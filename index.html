@@ -1,154 +1,204 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RetroNebula's Archive</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-:root { --beige: #F5F5DC; --tan: #D2B48C; --oak: #8B4513; --paper: #FDFBF7; }
-body { background-color: var(--paper); color: #3E2723; font-family: 'Georgia', serif; }
-.library-card { background: white; border: 1px solid var(--tan); border-radius: 0.5rem; transition: all 0.2s ease; }
-.library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-.status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; }
-#mangaGrid::-webkit-scrollbar { width: 6px; }
-#mangaGrid::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 10px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroNebula's Archive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --beige: #F5F5DC; --tan: #D2B48C; --oak: #8B4513; --paper: #FDFBF7; }
+        body { background-color: var(--paper); color: #3E2723; font-family: 'Georgia', serif; }
+        .library-card { background: white; border: 1px solid var(--tan); border-radius: 0.5rem; transition: all 0.2s ease; border-left-width: 4px; }
+        .library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; }
+        #mangaGrid::-webkit-scrollbar { width: 6px; }
+        #mangaGrid::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 10px; }
+    </style>
 </head>
 <body class="p-4">
 
 <div class="max-w-5xl mx-auto">
-<header class="mb-6 pb-4 border-b-2 border-oak flex justify-between items-center text-stone-800">
-<div>
-<h1 class="text-2xl font-bold">RetroNebula's Archive</h1>
-<p id="syncText" class="text-xs italic text-stone-500">Notion Powered Library</p>
-</div>
-<button onclick="loadFromNotion()" class="bg-stone-800 text-white px-4 py-2 rounded text-sm font-bold shadow-sm hover:bg-stone-700 transition-all">
-🔄 Refresh Library
-</button>
-</header>
-
-<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
-    <aside class="md:col-span-4">
-        <div class="bg-white p-4 rounded-lg border border-tan shadow-sm sticky top-4">
-            <h2 class="text-sm font-bold mb-3 border-b border-stone-100 pb-2">📊 Statistics</h2>
-            <div style="height: 220px;"><canvas id="statusChart"></canvas></div>
+    <header class="mb-6 pb-4 border-b-2 border-oak flex justify-between items-center text-stone-800">
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight">RetroNebula's Archive</h1>
+            <p id="syncText" class="text-xs italic text-stone-500">Notion Powered Library</p>
         </div>
-    </aside>
+        <button onclick="loadFromNotion()" class="bg-stone-800 text-white px-5 py-2.5 rounded-md text-sm font-bold shadow-sm hover:bg-stone-700 transition-all active:scale-95">
+            🔄 Refresh Library
+        </button>
+    </header>
 
-    <main class="md:col-span-8">
-        <div class="mb-4">
-            <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." 
-                   class="w-full border border-tan rounded-lg p-3 text-sm outline-none shadow-sm focus:ring-1 focus:ring-oak">
-        </div>
-        <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 h-[650px] overflow-y-auto pr-2">
-            <!-- Data -->
-        </div>
-    </main>
-</div>
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <aside class="md:col-span-4">
+            <div class="bg-white p-5 rounded-lg border border-tan shadow-sm sticky top-4">
+                <h2 class="text-sm font-bold mb-4 border-b border-stone-100 pb-2 flex items-center">
+                    <span class="mr-2">📊</span> Statistics
+                </h2>
+                <div style="height: 240px;"><canvas id="statusChart"></canvas></div>
+            </div>
+        </aside>
 
-
+        <main class="md:col-span-8">
+            <div class="mb-4 relative">
+                <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." 
+                       class="w-full border border-tan rounded-lg p-3.5 pl-10 text-sm outline-none shadow-sm focus:ring-2 focus:ring-tan/30 transition-all">
+                <span class="absolute left-3.5 top-3.5 text-stone-400">🔍</span>
+            </div>
+            
+            <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 h-[70vh] overflow-y-auto pr-2">
+                <!-- Data injected here -->
+            </div>
+        </main>
+    </div>
 </div>
 
 <script>
-/**
-* If you are using Cloudflare Pages with a /functions folder:
-* Your API URL is usually just "/index" when running on the live site.
-* When testing here, we use the full workers.dev URL.
-*/
-const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
+    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
+    
+    let mangaData = [];
+    let chartInstance = null;
 
-let mangaData = [];
-let chartInstance = null;
-
-async function loadFromNotion() {
-    const grid = document.getElementById(&quot;mangaGrid&quot;);
-    const syncText = document.getElementById(&quot;syncText&quot;);
-    grid.innerHTML = `&lt;div class=&quot;col-span-full text-center py-20 animate-pulse text-stone-400 italic&quot;&gt;📚 Fetching from Notion...&lt;/div&gt;`;
-
-    try {
-        // Note: We use WORKER_URL for preview/cross-domain testing
-        const resp = await fetch(WORKER_URL);
+    async function loadFromNotion() {
+        const grid = document.getElementById("mangaGrid");
+        const syncText = document.getElementById("syncText");
         
-        const contentType = resp.headers.get(&quot;content-type&quot;);
-        if (!contentType || !contentType.includes(&quot;application/json&quot;)) {
-            throw new Error(&quot;Worker did not return JSON. It likely returned an HTML error page. Check the Worker URL and Secrets.&quot;);
+        grid.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center py-20 text-stone-400">
+                <div class="animate-spin text-3xl mb-4">📖</div>
+                <div class="italic text-sm">Consulting the Notion Archives...</div>
+            </div>`;
+
+        try {
+            // "no-cache" helps ensure we aren't getting a stale 404
+            const resp = await fetch(WORKER_URL, {
+                method: 'GET',
+                cache: 'no-cache'
+            });
+            
+            if (!resp.ok) {
+                throw new Error(`Worker Error: ${resp.status} ${resp.statusText}`);
+            }
+
+            const contentType = resp.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error("The Worker returned HTML instead of JSON. Deployment might still be in progress.");
+            }
+
+            const data = await resp.json();
+            if (data.error) throw new Error(data.error);
+
+            mangaData = (data.results || []).map(page => ({
+                id: page.id,
+                name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
+                status: page.properties.Status?.select?.name || "Plan to Read",
+                ch: page.properties.Chapters?.number || 0 
+            }));
+
+            syncText.innerText = `✨ ${mangaData.length} items synced`;
+            render();
+        } catch (err) {
+            console.error("Fetch Error:", err);
+            grid.innerHTML = `
+                <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
+                    <p class="text-red-800 font-bold mb-1">Failed to connect to Archive</p>
+                    <p class="text-red-600 text-xs mb-4 italic">${err.message}</p>
+                    
+                    <div class="bg-white p-4 rounded border border-red-100 text-[10px] text-stone-600 space-y-2">
+                        <p><b>If you just updated GitHub:</b> Cloudflare takes 1-2 minutes to update. Refresh this page in a bit.</p>
+                        <p><b>Browser Security:</b> If you see "CORS" in your browser console, it means the worker isn't sending the right headers yet.</p>
+                        <p><b>Manual Check:</b> Open <a href="${WORKER_URL}" target="_blank" class="text-blue-600 underline">${WORKER_URL}</a>. If you see JSON there but not here, it's a CORS issue.</p>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    function render(data = mangaData) {
+        const grid = document.getElementById("mangaGrid");
+        grid.innerHTML = "";
+        
+        if (data.length === 0) {
+            grid.innerHTML = '<div class="col-span-full text-center py-20 text-stone-400 italic">No matches found.</div>';
+            return;
         }
 
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-
-        mangaData = (data.results || []).map(page =&gt; ({
-            id: page.id,
-            name: page.properties.Name?.title[0]?.plain_text || &quot;Untitled&quot;,
-            status: page.properties.Status?.select?.name || &quot;Plan to Read&quot;,
-            ch: page.properties.Chapters?.number || 0 
-        }));
-
-        syncText.innerText = `✨ ${mangaData.length} items synced`;
-        render();
-    } catch (err) {
-        console.error(&quot;Load Error:&quot;, err);
-        grid.innerHTML = `
-            &lt;div class=&quot;col-span-full p-6 bg-red-50 rounded-lg border border-red-200&quot;&gt;
-                &lt;p class=&quot;text-red-800 font-bold mb-2&quot;&gt;Sync Error&lt;/p&gt;
-                &lt;p class=&quot;text-red-600 text-[11px] mb-4&quot;&gt;${err.message}&lt;/p&gt;
-                &lt;p class=&quot;text-[10px] text-gray-500&quot;&gt;Likely cause: The URL &lt;b&gt;${WORKER_URL}&lt;/b&gt; is returning a 404 HTML page instead of the Worker response.&lt;/p&gt;
-            &lt;/div&gt;`;
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
+            const card = document.createElement("div");
+            card.className = "library-card p-4 flex flex-col justify-between h-40 " + getBorder(m.status);
+            card.innerHTML = `
+                <div>
+                    <span class="status-pill ${getPill(m.status)}">${m.status}</span>
+                    <h3 class="font-bold text-stone-800 text-sm mt-3 leading-tight line-clamp-2">${m.name}</h3>
+                </div>
+                <div class="flex justify-between items-center text-[11px] text-stone-400 border-t border-stone-50 pt-3 italic">
+                    <span>Progress</span>
+                    <span class="font-bold text-stone-700 bg-stone-100 px-2 py-0.5 rounded">Ch. ${m.ch}</span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+        updateChart();
     }
-}
 
-function render(data = mangaData) {
-    const grid = document.getElementById(&quot;mangaGrid&quot;);
-    grid.innerHTML = &quot;&quot;;
-    data.sort((a, b) =&gt; a.name.localeCompare(b.name)).forEach(m =&gt; {
-        const card = document.createElement(&quot;div&quot;);
-        card.className = &quot;library-card p-4 flex flex-col justify-between h-36 border-l-4 &quot; + getBorder(m.status);
-        card.innerHTML = `
-            &lt;div&gt;&lt;span class=&quot;status-pill ${getPill(m.status)}&quot;&gt;${m.status}&lt;/span&gt;
-            &lt;h3 class=&quot;font-bold text-stone-800 text-sm mt-2 line-clamp-2&quot;&gt;${m.name}&lt;/h3&gt;&lt;/div&gt;
-            &lt;div class=&quot;text-[11px] text-stone-400 border-t pt-2 italic text-right&quot;&gt;Ch. ${m.ch}&lt;/div&gt;`;
-        grid.appendChild(card);
-    });
-    updateChart();
-}
+    function getPill(s) {
+        const st = s.toLowerCase();
+        if (st.includes("reading")) return "bg-blue-100 text-blue-700";
+        if (st.includes("read") || st.includes("complete")) return "bg-emerald-100 text-emerald-700";
+        if (st.includes("stalled") || st.includes("hold")) return "bg-orange-100 text-orange-700";
+        return "bg-stone-100 text-stone-600";
+    }
 
-function getPill(s) {
-    const st = s.toLowerCase();
-    if (st.includes(&quot;reading&quot;)) return &quot;bg-blue-50 text-blue-700&quot;;
-    if (st.includes(&quot;read&quot;) || st.includes(&quot;complete&quot;)) return &quot;bg-emerald-50 text-emerald-700&quot;;
-    return &quot;bg-stone-100 text-stone-600&quot;;
-}
+    function getBorder(s) {
+        const st = s.toLowerCase();
+        if (st.includes("reading")) return "border-l-blue-400";
+        if (st.includes("read") || st.includes("complete")) return "border-l-emerald-400";
+        if (st.includes("stalled") || st.includes("hold")) return "border-l-orange-400";
+        return "border-l-stone-300";
+    }
 
-function getBorder(s) {
-    const st = s.toLowerCase();
-    if (st.includes(&quot;reading&quot;)) return &quot;border-l-blue-400&quot;;
-    if (st.includes(&quot;read&quot;) || st.includes(&quot;complete&quot;)) return &quot;border-l-emerald-400&quot;;
-    return &quot;border-l-stone-300&quot;;
-}
+    function handleSearch() {
+        const term = document.getElementById("searchInput").value.toLowerCase();
+        render(mangaData.filter(m => m.name.toLowerCase().includes(term)));
+    }
 
-function handleSearch() {
-    const term = document.getElementById(&quot;searchInput&quot;).value.toLowerCase();
-    render(mangaData.filter(m =&gt; m.name.toLowerCase().includes(term)));
-}
+    function updateChart() {
+        const canvas = document.getElementById("statusChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        const stats = mangaData.reduce((acc, m) => { 
+            const s = m.status || "Other";
+            acc[s] = (acc[s] || 0) + 1; 
+            return acc; 
+        }, {});
+        
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+            type: "doughnut",
+            data: {
+                labels: Object.keys(stats),
+                datasets: [{
+                    data: Object.values(stats),
+                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB", "#D2B48C"],
+                    borderWidth: 2, 
+                    borderColor: "#fff"
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { 
+                        position: "bottom", 
+                        labels: { boxWidth: 8, padding: 15, font: { size: 10, family: "Georgia" } } 
+                    } 
+                },
+                cutout: "70%"
+            }
+        });
+    }
 
-function updateChart() {
-    const ctx = document.getElementById(&quot;statusChart&quot;).getContext(&quot;2d&quot;);
-    const stats = mangaData.reduce((acc, m) =&gt; { const s = m.status || &quot;Other&quot;; acc[s] = (acc[s] || 0) + 1; return acc; }, {});
-    if (chartInstance) chartInstance.destroy();
-    chartInstance = new Chart(ctx, {
-        type: &quot;doughnut&quot;,
-        data: { labels: Object.keys(stats), datasets: [{ data: Object.values(stats), backgroundColor: [&quot;#80BCBD&quot;, &quot;#AAD9BB&quot;, &quot;#D5F0C1&quot;, &quot;#F9F7C9&quot;, &quot;#E5E7EB&quot;] }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: &quot;bottom&quot;, labels: { boxWidth: 10, font: { size: 10 } } } }, cutout: &quot;65%&quot; }
-    });
-}
-
-document.addEventListener(&quot;DOMContentLoaded&quot;, loadFromNotion);
-
-
+    document.addEventListener("DOMContentLoaded", loadFromNotion);
 </script>
-
 </body>
 </html>
