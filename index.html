@@ -12,8 +12,6 @@
         .library-card { background: white; border: 1px solid var(--tan); border-radius: 0.5rem; transition: all 0.2s ease; }
         .library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         .status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; }
-        #mangaGrid::-webkit-scrollbar { width: 6px; }
-        #mangaGrid::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 10px; }
     </style>
 </head>
 <body class="p-4">
@@ -22,7 +20,7 @@
     <header class="mb-6 pb-4 border-b-2 border-oak flex justify-between items-center text-stone-800">
         <div>
             <h1 class="text-2xl font-bold">RetroNebula's Archive</h1>
-            <p class="text-xs italic text-stone-500">Notion Powered Library</p>
+            <p id="syncText" class="text-xs italic text-stone-500">Notion Powered Library</p>
         </div>
         <button onclick="loadFromNotion()" class="bg-stone-800 text-white px-4 py-2 rounded text-sm font-bold shadow-sm hover:bg-stone-700 transition-all">
             🔄 Refresh Library
@@ -42,7 +40,6 @@
                 <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." 
                        class="w-full border border-tan rounded-lg p-3 text-sm outline-none shadow-sm focus:ring-1 focus:ring-oak">
             </div>
-            
             <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 h-[650px] overflow-y-auto pr-2">
                 <!-- Data loads here -->
             </div>
@@ -51,100 +48,66 @@
 </div>
 
 <script>
-    // Configuration
-    const LIVE_WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
-    
-    // Check if we are in a preview/local environment
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isBlob = window.location.protocol === 'blob:';
-    
-    // Use absolute URL for previews, relative for the actual site
-    const PROXY_URL = (isLocal || isBlob) ? LIVE_WORKER_URL : "/index";
+    // TRY REMOVING THE "/index" AT THE END IF IT STILL FAILS
+    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev"; 
 
     let mangaData = [];
     let chartInstance = null;
 
     async function loadFromNotion() {
         const grid = document.getElementById("mangaGrid");
-        grid.innerHTML = `
-            <div class="col-span-full text-center py-20 animate-pulse">
-                <div class="text-3xl mb-2">📚</div>
-                <div class="text-stone-400 italic font-serif">Consulting the Notion Archives...</div>
-            </div>`;
+        const syncText = document.getElementById("syncText");
+        grid.innerHTML = `<div class="col-span-full text-center py-20 animate-pulse text-stone-400 italic">📚 Checking Archive...</div>`;
 
         try {
-            const resp = await fetch(PROXY_URL, {
-                method: 'GET',
-                // Adding 'cors' mode explicitly for cross-domain requests
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            const resp = await fetch(WORKER_URL);
             
-            if (!resp.ok) {
-                throw new Error(`Worker responded with status: ${resp.status}`);
-            }
-            
-            const data = await resp.json();
-            
-            if (data.error) {
-                throw new Error(data.error);
+            // Check if we got HTML instead of JSON
+            const contentType = resp.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") === -1) {
+                const text = await resp.text();
+                console.error("Received HTML instead of JSON:", text);
+                throw new Error("Worker returned an HTML page (likely a 404 or Error) instead of data. Check your Worker URL.");
             }
 
-            // Map Notion properties to local objects
+            const data = await resp.json();
+            if (data.error) throw new Error(data.error);
+
             mangaData = (data.results || []).map(page => ({
                 id: page.id,
                 name: page.properties.Name?.title[0]?.plain_text || "Untitled",
                 status: page.properties.Status?.select?.name || "Plan to Read",
-                ch: page.properties.Chapters?.number || 0
+                ch: page.properties.Chapters?.number || 0 
             }));
 
+            syncText.innerText = `✨ ${mangaData.length} items synced`;
             render();
         } catch (err) {
-            console.error("Fetch Error:", err);
-            
-            // Helpful UI for CORS or Network issues
+            console.error("Load Error:", err);
             grid.innerHTML = `
                 <div class="col-span-full p-6 bg-red-50 rounded-lg border border-red-200">
-                    <p class="text-red-800 font-bold font-serif mb-2 text-lg">Sync Connection Failed</p>
-                    <p class="text-red-600 text-xs italic mb-4">${err.message}</p>
-                    
-                    <div class="space-y-3 text-[11px] text-stone-700 bg-white/80 p-4 rounded border border-red-100">
-                        <p><strong>Common Fixes:</strong></p>
-                        <ol class="list-decimal ml-4 space-y-1">
-                            <li><strong>Worker Headers:</strong> Your Cloudflare Worker must send <code>"Access-Control-Allow-Origin": "*"</code> in the response headers.</li>
-                            <li><strong>Worker Status:</strong> Visit <a href="${LIVE_WORKER_URL}" target="_blank" class="text-blue-600 underline">${LIVE_WORKER_URL}</a> directly. If it shows an error there, the issue is your Notion Token or Database ID.</li>
-                            <li><strong>Browser:</strong> If you see "CORS" in the console, your browser is blocking the request for safety. It usually works fine on the live domain.</li>
-                        </ol>
+                    <p class="text-red-800 font-bold mb-2">Sync Connection Failed</p>
+                    <p class="text-red-600 text-[11px] italic mb-4">${err.message}</p>
+                    <div class="text-[10px] text-stone-600 bg-white p-3 rounded border">
+                        <strong>Checklist:</strong><br>
+                        1. Visit <a href="${WORKER_URL}" target="_blank" class="text-blue-500 underline">${WORKER_URL}</a>. Do you see JSON or an error page?<br>
+                        2. If you see a Cloudflare Error page, your Worker isn't working correctly.<br>
+                        3. Ensure the columns in Notion are "Name", "Status", and "Chapters".
                     </div>
-                </div>
-            `;
+                </div>`;
         }
     }
 
     function render(data = mangaData) {
         const grid = document.getElementById("mangaGrid");
         grid.innerHTML = "";
-        
-        if (data.length === 0) {
-            grid.innerHTML = '<div class="col-span-full text-center py-20 text-stone-400 italic">No matches found.</div>';
-            return;
-        }
-
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
             const card = document.createElement("div");
             card.className = "library-card p-4 flex flex-col justify-between h-36 border-l-4 " + getBorder(m.status);
             card.innerHTML = `
-                <div>
-                    <span class="status-pill ${getPill(m.status)}">${m.status}</span>
-                    <h3 class="font-bold text-stone-800 text-sm mt-2 leading-tight line-clamp-2">${m.name}</h3>
-                </div>
-                <div class="flex justify-between items-center text-[11px] text-stone-400 border-t border-stone-50 pt-2 italic">
-                    <span>Progress</span>
-                    <span class="font-bold text-stone-600">Ch. ${m.ch}</span>
-                </div>
-            `;
+                <div><span class="status-pill ${getPill(m.status)}">${m.status}</span>
+                <h3 class="font-bold text-stone-800 text-sm mt-2 line-clamp-2">${m.name}</h3></div>
+                <div class="text-[11px] text-stone-400 border-t pt-2 italic">Progress: <span class="font-bold text-stone-600">Ch. ${m.ch}</span></div>`;
             grid.appendChild(card);
         });
         updateChart();
@@ -154,7 +117,6 @@
         const st = s.toLowerCase();
         if (st.includes("reading")) return "bg-blue-50 text-blue-700";
         if (st.includes("read") || st.includes("complete")) return "bg-emerald-50 text-emerald-700";
-        if (st.includes("stalled") || st.includes("hold")) return "bg-orange-50 text-orange-700";
         return "bg-stone-100 text-stone-600";
     }
 
@@ -162,7 +124,6 @@
         const st = s.toLowerCase();
         if (st.includes("reading")) return "border-l-blue-400";
         if (st.includes("read") || st.includes("complete")) return "border-l-emerald-400";
-        if (st.includes("stalled") || st.includes("hold")) return "border-l-orange-400";
         return "border-l-stone-300";
     }
 
@@ -173,29 +134,12 @@
 
     function updateChart() {
         const ctx = document.getElementById("statusChart").getContext("2d");
-        const stats = mangaData.reduce((acc, m) => { 
-            const s = m.status || "Other";
-            acc[s] = (acc[s] || 0) + 1; 
-            return acc; 
-        }, {});
-        
+        const stats = mangaData.reduce((acc, m) => { const s = m.status || "Other"; acc[s] = (acc[s] || 0) + 1; return acc; }, {});
         if (chartInstance) chartInstance.destroy();
         chartInstance = new Chart(ctx, {
             type: "doughnut",
-            data: {
-                labels: Object.keys(stats),
-                datasets: [{
-                    data: Object.values(stats),
-                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB"],
-                    borderWidth: 2, borderColor: "#fff"
-                }]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10, family: "Georgia" } } } },
-                cutout: "65%"
-            }
+            data: { labels: Object.keys(stats), datasets: [{ data: Object.values(stats), backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB"] }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } }, cutout: "65%" }
         });
     }
 
