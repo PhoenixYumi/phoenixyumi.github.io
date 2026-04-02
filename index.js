@@ -2,10 +2,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // 1. ROUTING: If the path is /api, run the Notion logic
-    if (url.pathname === "/api" || url.pathname === "/index") {
-      
-      // Handle CORS Preflight (important for browsers)
+    // Route for the Notion API
+    if (url.pathname === "/api") {
+      // Handle CORS for the browser
       if (request.method === "OPTIONS") {
         return new Response(null, {
           headers: {
@@ -41,14 +40,20 @@ export default {
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          headers: { 
+            "Content-Type": "application/json", 
+            "Access-Control-Allow-Origin": "*" 
+          },
         });
       }
     }
 
-    // 2. FALLBACK: If it's not an API call, serve the static assets (index.html)
-    // Cloudflare Workers with Assets automatically does this if we return nothing 
-    // or if the assets fetcher is called.
-    return env.ASSETS.fetch(request);
+    // Default: Try to serve static assets from the /public folder
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    // Fallback if assets are missing
+    return new Response("Not Found", { status: 404 });
   },
 };
