@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RetroNebula's Cloud Archive</title>
+    <title>RetroNebula's Archive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -16,8 +16,6 @@
         .library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 8px rgba(62,39,35,0.1); }
         .shelf-header { border-bottom: 3px solid var(--oak); }
         .status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; }
-        .ai-loading { width: 16px; height: 16px; border: 2px solid rgba(139,69,19,0.2); border-top-color: var(--oak); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--paper); }
         ::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 4px; }
@@ -32,7 +30,7 @@
     <header class="mb-6 pb-4 shelf-header flex justify-between items-center">
         <div>
             <h1 class="text-2xl md:text-3xl font-bold">RetroNebula's Archive</h1>
-            <p class="text-xs italic text-gray-600">✨ Cloud Synced • AI Librarian Enabled</p>
+            <p class="text-xs italic text-gray-600">✨ Offline-Ready • Manual Sync Enabled</p>
         </div>
         <div class="flex gap-2">
             <button onclick="openImport()" class="border border-oak text-oak px-3 py-2 rounded text-xs font-bold hover:bg-oak/10">Bulk Import</button>
@@ -41,30 +39,20 @@
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <!-- Sidebar -->
         <aside class="md:col-span-4 space-y-6">
             <div class="bg-white p-4 rounded-lg border border-tan">
                 <h2 class="text-sm font-bold mb-3">📊 Library Stats</h2>
                 <div style="height: 180px;"><canvas id="statusChart"></canvas></div>
-            </div>
-
-            <div class="bg-[#F5F5DC] p-4 rounded-lg border border-tan">
-                <h2 class="text-sm font-bold mb-2">✨ AI Librarian</h2>
-                <div id="ai-chat-box" class="h-40 overflow-y-auto mb-3 text-xs space-y-2 p-2 bg-white/50 rounded border border-tan/30">
-                    <div class="italic">Ready to help with your collection...</div>
-                </div>
-                <div class="flex gap-1">
-                    <input type="text" id="aiInput" placeholder="Ask AI..." class="flex-grow text-xs outline-none">
-                    <button onclick="sendToAI()" class="btn-oak px-2 py-1 rounded text-xs">✨</button>
+                <div class="mt-4 pt-4 border-t border-tan/30">
+                    <button onclick="exportBackup()" class="text-[10px] text-oak hover:underline">Download Backup (.json)</button>
                 </div>
             </div>
         </aside>
 
-        <!-- Main Grid -->
         <main class="md:col-span-8">
             <div class="flex flex-wrap gap-2 mb-4">
-                <input type="text" id="searchInput" placeholder="Search titles..." class="flex-grow outline-none border-tan">
-                <select id="statusFilter" class="outline-none border-tan">
+                <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." class="flex-grow outline-none border-tan">
+                <select id="statusFilter" onchange="handleFilter()" class="outline-none border-tan">
                     <option value="all">All Statuses</option>
                     <option value="reading">Reading</option>
                     <option value="read">Completed</option>
@@ -72,30 +60,24 @@
                     <option value="stalled">On Hold</option>
                 </select>
             </div>
-            <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 h-[600px] overflow-y-auto pr-2">
-                <!-- Data loads here -->
-                <div class="col-span-full flex flex-col items-center justify-center h-full opacity-50">
-                    <div class="ai-loading mb-2"></div>
-                    <p class="text-sm italic">Synchronizing with cloud...</p>
-                </div>
-            </div>
+            <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 h-[600px] overflow-y-auto pr-2"></div>
         </main>
     </div>
 </div>
 
-<!-- Add/Edit Form Modal -->
+<!-- Form Modal -->
 <div id="formModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
-    <div class="bg-white w-full max-w-md rounded-lg shadow-2xl p-6 border-2 border-oak">
-        <h2 id="formTitle" class="text-xl font-bold mb-4 border-b border-tan pb-2">Add New Manga</h2>
-        <form id="mangaForm" class="space-y-4">
+    <div class="bg-white w-full max-w-md rounded-lg p-6 border-2 border-oak shadow-2xl">
+        <h2 id="formTitle" class="text-xl font-bold mb-4 border-b border-tan pb-2 text-oak">Edit Title</h2>
+        <form id="mangaForm" onsubmit="handleSave(event)" class="space-y-4">
             <input type="hidden" id="editId">
             <div>
-                <label class="block text-xs font-bold uppercase mb-1">Title</label>
+                <label class="block text-[10px] font-bold uppercase mb-1">Title</label>
                 <input type="text" id="formName" class="w-full" required>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs font-bold uppercase mb-1">Status</label>
+                    <label class="block text-[10px] font-bold uppercase mb-1">Status</label>
                     <select id="formStatus" class="w-full">
                         <option value="reading">Reading</option>
                         <option value="read">Completed</option>
@@ -104,222 +86,100 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold uppercase mb-1">Chapters</label>
+                    <label class="block text-[10px] font-bold uppercase mb-1">Chapters</label>
                     <input type="number" id="formCh" class="w-full" value="0">
                 </div>
             </div>
-            <div>
-                <label class="block text-xs font-bold uppercase mb-1">Rating (0-5)</label>
-                <input type="number" id="formRating" step="0.5" min="0" max="5" class="w-full" value="0">
-            </div>
             <div class="flex gap-2 pt-4">
-                <button type="button" onclick="closeForm()" class="flex-grow border border-tan py-2 rounded text-sm">Cancel</button>
-                <button type="submit" class="flex-grow btn-oak py-2 rounded text-sm font-bold">Save Title</button>
+                <button type="button" onclick="closeForm()" class="flex-grow border border-tan py-2 rounded text-sm hover:bg-gray-50">Cancel</button>
+                <button type="submit" class="flex-grow btn-oak py-2 rounded text-sm font-bold shadow-md">Save Changes</button>
             </div>
-            <button type="button" id="deleteBtn" class="w-full text-red-600 text-xs mt-2 hidden hover:underline" onclick="deleteEntry()">Delete Entry Permanently</button>
+            <button type="button" id="deleteBtn" class="w-full text-red-600 text-xs mt-2 hidden hover:underline" onclick="handleDelete()">Remove from Archive</button>
         </form>
     </div>
 </div>
 
-<!-- Bulk Import Modal -->
+<!-- Import Modal -->
 <div id="importModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
-    <div class="bg-white w-full max-w-lg rounded-lg shadow-2xl p-6 border-2 border-oak">
-        <h2 class="text-xl font-bold mb-2">Bulk Import Archive</h2>
-        <p class="text-xs text-gray-500 mb-4">Paste your Manga JSON export or list here. We'll automatically try to parse it.</p>
-        <textarea id="importArea" class="w-full h-64 font-mono text-xs mb-4" placeholder='[{"name": "Manga Title", "status": "read"...}]'></textarea>
+    <div class="bg-white w-full max-w-lg rounded-lg p-6 border-2 border-oak shadow-2xl">
+        <h2 class="text-xl font-bold mb-2 text-oak">Bulk Import Archive</h2>
+        <p class="text-xs text-gray-500 mb-4 italic">Paste the contents of your exported JSON file below.</p>
+        <textarea id="importArea" class="w-full h-64 font-mono text-xs mb-4 p-2 border border-tan/50" placeholder='Paste JSON content here...'></textarea>
         <div class="flex gap-2">
-            <button onclick="closeImport()" class="flex-grow border border-tan py-2 rounded text-sm">Cancel</button>
-            <button onclick="processImport()" class="flex-grow btn-oak py-2 rounded text-sm font-bold">Start Import</button>
+            <button onclick="closeImport()" class="flex-grow border border-tan py-2 rounded text-sm hover:bg-gray-50">Cancel</button>
+            <button onclick="processImport()" class="flex-grow btn-oak py-2 rounded text-sm font-bold shadow-md">Load Archive</button>
         </div>
     </div>
 </div>
 
-<!-- AI Insight Modal -->
-<div id="insightModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center p-4 z-50">
-    <div class="bg-white max-w-sm w-full rounded border-2 border-oak shadow-xl p-5">
-        <h3 id="insightTitle" class="font-bold border-b border-tan pb-2 mb-3">AI Insight</h3>
-        <p id="insightBody" class="text-sm italic leading-relaxed"></p>
-        <button onclick="closeInsight()" class="mt-4 w-full btn-oak py-1 rounded text-sm">Close</button>
-    </div>
-</div>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-
-    // Setup Environment Variables
-    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'manga-archive-default';
-    const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-    
-    let mangaData = [];
-    let user = null;
+<script>
+    // Initialize data from LocalStorage
+    let mangaData = JSON.parse(localStorage.getItem('retroArchive')) || [];
     let chartInstance = null;
 
-    // --- AUTHENTICATION FLOW ---
-    const initAuth = async () => {
-        try {
-            if (initialToken) {
-                await signInWithCustomToken(auth, initialToken);
-            } else {
-                await signInAnonymously(auth);
-            }
-        } catch (e) {
-            console.error("Auth failed:", e);
-        }
-    };
-    initAuth();
-
-    onAuthStateChanged(auth, (u) => {
-        user = u;
-        if(user) {
-            // Path: /artifacts/{appId}/public/data/manga
-            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'manga');
-            onSnapshot(colRef, (snapshot) => {
-                mangaData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                render(mangaData);
-                updateChart();
-            }, (err) => {
-                console.error("Firestore Permission Error. Check Pathing Rules.", err);
-            });
-        }
-    });
-
-    // --- CRUD OPERATIONS ---
-    document.getElementById('mangaForm').onsubmit = async (e) => {
-        e.preventDefault();
-        if(!user) return;
-        const id = document.getElementById('editId').value;
-        const data = {
-            name: document.getElementById('formName').value,
-            status: document.getElementById('formStatus').value,
-            ch: parseInt(document.getElementById('formCh').value) || 0,
-            rating: parseFloat(document.getElementById('formRating').value) || 0,
-            updatedAt: Date.now()
-        };
-
-        try {
-            if(id) {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'manga', id), data);
-            } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'manga'), data);
-            }
-            closeForm();
-        } catch(e) { console.error("Save error:", e); }
-    };
-
-    window.deleteEntry = async () => {
-        const id = document.getElementById('editId').value;
-        if(id && confirm("Are you sure? This title will be removed from your cloud archive.")) {
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'manga', id));
-            closeForm();
-        }
-    };
-
-    // --- BULK IMPORT ---
-    window.openImport = () => document.getElementById('importModal').classList.remove('hidden');
-    window.closeImport = () => document.getElementById('importModal').classList.add('hidden');
-    
-    window.processImport = async () => {
-        const text = document.getElementById('importArea').value;
-        try {
-            let dataToImport = [];
-            const parsed = JSON.parse(text);
-            
-            // Handle different JSON formats (standard list or common exports)
-            if (Array.isArray(parsed)) dataToImport = parsed;
-            else if (parsed.entries && Array.isArray(parsed.entries)) dataToImport = parsed.entries;
-            
-            if (dataToImport.length === 0) throw new Error("No entries found");
-
-            const batch = writeBatch(db);
-            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'manga');
-            
-            dataToImport.forEach(item => {
-                const newDoc = doc(colRef);
-                batch.set(newDoc, {
-                    name: item.name || "Untitled",
-                    status: (item.status || "want to read").toLowerCase(),
-                    ch: parseInt(item.ch) || 0,
-                    rating: parseFloat(item.rating) || 0,
-                    updatedAt: Date.now()
-                });
-            });
-
-            await batch.commit();
-            closeImport();
-            alert(`Successfully imported ${dataToImport.length} titles!`);
-        } catch (e) {
-            alert("Error parsing JSON. Ensure it's a valid list of manga objects.");
-        }
-    };
-
-    // --- UI RENDERING ---
-    function render(data) {
+    function render(data = mangaData) {
         const grid = document.getElementById('mangaGrid');
-        grid.innerHTML = '';
-        if(data.length === 0) {
-            grid.innerHTML = `<div class="col-span-full text-center py-12 opacity-50 italic">Archive is empty. Click "+ Add Title" or "Bulk Import" to begin.</div>`;
+        
+        if (!data.length) {
+            grid.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center h-64 opacity-60">
+                    <p class="text-sm italic mb-2">Your archive is currently empty.</p>
+                    <button onclick="openImport()" class="text-xs text-oak underline">Import your JSON file to begin</button>
+                </div>
+            `;
+            updateChart();
             return;
         }
 
-        // Sort by name
-        data.sort((a,b) => a.name.localeCompare(b.name)).forEach(m => {
+        grid.innerHTML = '';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
             const card = document.createElement('div');
             card.className = 'library-card p-3 flex flex-col justify-between h-32';
             card.innerHTML = `
                 <div>
                     <div class="flex justify-between items-start mb-1">
                         <span class="status-pill ${getStatusClass(m.status)}">${m.status}</span>
-                        <div class="flex gap-2">
-                            <button onclick="getInsight('${m.name.replace(/'/g, "\\'")}')" class="text-xs hover:scale-125 transition-transform" title="AI Info">✨</button>
-                            <button onclick="openForm('${m.id}')" class="text-xs opacity-30 hover:opacity-100" title="Edit">⚙️</button>
-                        </div>
+                        <button onclick="openForm('${m.id}')" class="text-xs opacity-20 hover:opacity-100 p-1">⚙️</button>
                     </div>
                     <h3 class="font-bold text-sm leading-tight line-clamp-2">${m.name}</h3>
                 </div>
-                <div class="flex justify-between items-end text-[10px] text-gray-500 italic border-t pt-1">
-                    <span>Ch: ${m.ch}</span>
-                    <span class="text-yellow-700 font-bold">${m.rating > 0 ? '★ ' + m.rating : ''}</span>
+                <div class="text-[10px] text-gray-400 italic border-t border-tan/20 pt-1">
+                    Progress: Ch. ${m.ch || 0}
                 </div>
             `;
             grid.appendChild(card);
         });
+        updateChart();
     }
 
     function getStatusClass(s) {
-        const status = s.toLowerCase();
-        if (status === 'reading') return 'bg-blue-100 text-blue-800';
-        if (status === 'read' || status === 'completed') return 'bg-green-100 text-green-800';
-        if (status === 'stalled' || status === 'on hold') return 'bg-yellow-100 text-yellow-800';
+        const st = s.toLowerCase();
+        if (st === 'reading') return 'bg-blue-100 text-blue-800';
+        if (st === 'read' || st === 'completed') return 'bg-green-100 text-green-800';
+        if (st === 'stalled') return 'bg-yellow-100 text-yellow-800';
         return 'bg-gray-100 text-gray-600';
     }
 
     function updateChart() {
         const ctx = document.getElementById('statusChart').getContext('2d');
-        const counts = mangaData.reduce((acc, m) => { 
+        const stats = mangaData.reduce((acc, m) => { 
             const s = m.status.toLowerCase();
             acc[s] = (acc[s] || 0) + 1; 
             return acc; 
         }, {});
         
         const dataValues = [
-            counts.reading || 0, 
-            (counts.read || 0) + (counts.completed || 0), 
-            counts['want to read'] || counts.plan || 0, 
-            (counts.stalled || 0) + (counts['on hold'] || 0)
+            stats.reading || 0, 
+            (stats.read || 0) + (stats.completed || 0), 
+            stats['want to read'] || 0, 
+            stats.stalled || 0
         ];
-        
+
         if(chartInstance) chartInstance.destroy();
         chartInstance = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Reading', 'Read', 'Plan', 'Stalled'],
+                labels: ['Reading', 'Completed', 'Plan', 'Stalled'],
                 datasets: [{
                     data: dataValues,
                     backgroundColor: ['#AAD9BB', '#80BCBD', '#F9F7C9', '#D5F0C1'],
@@ -330,94 +190,125 @@
                 responsive: true, 
                 maintainAspectRatio: false, 
                 plugins: { 
-                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } 
+                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: 'Georgia' } } } 
                 } 
             }
         });
     }
 
-    // --- AI LOGIC ---
-    window.sendToAI = async () => {
-        const input = document.getElementById('aiInput');
-        const msg = input.value.trim();
-        if(!msg) return;
-        const box = document.getElementById('ai-chat-box');
-        box.innerHTML += `<div class="font-bold text-oak mt-2">You: ${msg}</div>`;
-        input.value = '';
-        const context = mangaData.slice(0, 20).map(m => m.name).join(", ");
-        const response = await callGemini(msg, `You are a vintage manga librarian. User has: ${context}. Keep advice brief and stylish.`);
-        box.innerHTML += `<div class="bg-white p-2 mt-1 rounded border shadow-sm">${response}</div>`;
-        box.scrollTop = box.scrollHeight;
+    window.handleSave = (e) => {
+        e.preventDefault();
+        const id = document.getElementById('editId').value || Math.random().toString(36).substr(2, 9);
+        const entry = {
+            id,
+            name: document.getElementById('formName').value,
+            status: document.getElementById('formStatus').value,
+            ch: document.getElementById('formCh').value
+        };
+        
+        const index = mangaData.findIndex(m => m.id === id);
+        if(index > -1) mangaData[index] = entry;
+        else mangaData.push(entry);
+        
+        saveAndRefresh();
+        closeForm();
     };
 
-    window.getInsight = async (name) => {
-        const modal = document.getElementById('insightModal');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        document.getElementById('insightTitle').innerText = name;
-        document.getElementById('insightBody').innerHTML = '<div class="ai-loading mx-auto my-4"></div>';
-        const res = await callGemini(`Describe the manga/novel "${name}".`, "Summarize this title in one catchy sentence.");
-        document.getElementById('insightBody').innerText = res;
-    };
+    window.processImport = () => {
+        const text = document.getElementById('importArea').value;
+        if (!text.trim()) return;
 
-    window.closeInsight = () => document.getElementById('insightModal').classList.add('hidden');
+        try {
+            const raw = JSON.parse(text);
+            const entries = raw.entries || raw;
+            
+            if (!Array.isArray(entries)) throw new Error();
 
-    async function callGemini(prompt, system) {
-        const apiKey = ""; 
-        let retries = 0;
-        while (retries < 5) {
-            try {
-                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: system }] } })
-                });
-                const data = await resp.json();
-                return data.candidates?.[0]?.content?.parts?.[0]?.text || "...";
-            } catch (e) {
-                retries++;
-                await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
-            }
+            // Map keys from your export format to the app format
+            mangaData = entries.map(e => ({
+                id: Math.random().toString(36).substr(2, 9),
+                name: e.name || "Unknown Title",
+                status: (e.status || "want to read").toLowerCase(),
+                ch: e.ch || 0
+            }));
+            
+            saveAndRefresh();
+            closeImport();
+            alert(`Loaded ${mangaData.length} titles successfully!`);
+        } catch (err) { 
+            alert("Error: Please paste the full text of your JSON export file."); 
         }
-        return "I'm having trouble connecting to the archives right now.";
+    };
+
+    function saveAndRefresh() {
+        localStorage.setItem('retroArchive', JSON.stringify(mangaData));
+        render();
     }
 
-    // --- SEARCH / FILTER ---
-    document.getElementById('searchInput').addEventListener('input', e => {
-        const term = e.target.value.toLowerCase();
-        render(mangaData.filter(m => m.name.toLowerCase().includes(term)));
-    });
+    window.exportBackup = () => {
+        const blob = new Blob([JSON.stringify(mangaData, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `RetroArchive_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+    };
 
-    document.getElementById('statusFilter').addEventListener('change', e => {
-        const stat = e.target.value;
-        render(stat === 'all' ? mangaData : mangaData.filter(m => m.status.toLowerCase() === stat));
-    });
-
-    // --- MODAL UTILS ---
-    window.openForm = (id = null) => {
-        const modal = document.getElementById('formModal');
-        const title = document.getElementById('formTitle');
-        const delBtn = document.getElementById('deleteBtn');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        
+    window.openForm = (id) => {
+        document.getElementById('formModal').classList.remove('hidden');
+        document.getElementById('formModal').classList.add('flex');
         if(id) {
-            const entry = mangaData.find(m => m.id === id);
-            title.innerText = "Edit Entry";
+            const m = mangaData.find(x => x.id === id);
             document.getElementById('editId').value = id;
-            document.getElementById('formName').value = entry.name;
-            document.getElementById('formStatus').value = entry.status;
-            document.getElementById('formCh').value = entry.ch;
-            document.getElementById('formRating').value = entry.rating;
-            delBtn.classList.remove('hidden');
+            document.getElementById('formName').value = m.name;
+            document.getElementById('formStatus').value = m.status;
+            document.getElementById('formCh').value = m.ch;
+            document.getElementById('deleteBtn').classList.remove('hidden');
+            document.getElementById('formTitle').innerText = "Edit Title";
         } else {
-            title.innerText = "Add New Manga";
             document.getElementById('mangaForm').reset();
-            document.getElementById('editId').value = "";
-            delBtn.classList.add('hidden');
+            document.getElementById('editId').value = '';
+            document.getElementById('deleteBtn').classList.add('hidden');
+            document.getElementById('formTitle').innerText = "Add New Title";
         }
     };
-    window.closeForm = () => document.getElementById('formModal').classList.add('hidden');
 
+    window.handleDelete = () => {
+        const id = document.getElementById('editId').value;
+        if(confirm("Permanently remove this title from your archive?")) {
+            mangaData = mangaData.filter(m => m.id !== id);
+            saveAndRefresh();
+            closeForm();
+        }
+    };
+
+    window.handleSearch = () => {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        render(mangaData.filter(m => m.name.toLowerCase().includes(term)));
+    };
+
+    window.handleFilter = () => {
+        const val = document.getElementById('statusFilter').value;
+        render(val === 'all' ? mangaData : mangaData.filter(m => m.status.toLowerCase() === val));
+    };
+
+    window.closeForm = () => {
+        document.getElementById('formModal').classList.add('hidden');
+        document.getElementById('formModal').classList.remove('flex');
+    };
+    
+    window.openImport = () => {
+        document.getElementById('importModal').classList.remove('hidden');
+        document.getElementById('importModal').classList.add('flex');
+    };
+    
+    window.closeImport = () => {
+        document.getElementById('importModal').classList.add('hidden');
+        document.getElementById('importModal').classList.remove('flex');
+    };
+
+    // Run on load
+    document.addEventListener('DOMContentLoaded', () => render());
 </script>
 </body>
 </html>
