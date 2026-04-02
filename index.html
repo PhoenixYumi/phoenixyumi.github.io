@@ -30,7 +30,6 @@
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <!-- Stats Sidebar -->
         <aside class="md:col-span-4">
             <div class="bg-white p-5 rounded-lg border border-tan shadow-sm sticky top-4">
                 <h2 class="text-sm font-bold mb-4 border-b border-stone-100 pb-2 flex items-center">
@@ -40,7 +39,6 @@
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="md:col-span-8">
             <div class="mb-4 relative">
                 <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." 
@@ -57,11 +55,7 @@
 
 <script>
     // Configuration
-    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
-    
-    // Use relative path for production, absolute for preview
-    const isLocalPreview = window.location.hostname.includes("goog") || window.location.hostname === "";
-    const API_ENDPOINT = isLocalPreview ? WORKER_URL : "/index";
+    const WORKER_BASE = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev";
     
     let mangaData = [];
     let chartInstance = null;
@@ -76,58 +70,71 @@
                 <div class="italic text-sm">Consulting the Notion Archives...</div>
             </div>`;
 
-        try {
-            console.log("Requesting data from:", API_ENDPOINT);
-            
-            const resp = await fetch(API_ENDPOINT, {
-                method: 'GET',
-                mode: 'cors', // Explicitly request CORS
-                headers: { 
-                    'Accept': 'application/json'
-                },
-                cache: 'no-cache'
-            });
-            
-            if (!resp.ok) {
-                throw new Error(`Worker Error: ${resp.status} ${resp.statusText}`);
-            }
+        // Try these paths in order
+        const endpoints = ["/index", "/api/index", `${WORKER_BASE}/index`];
+        let lastError = "";
+        let failedEndpoints = [];
 
-            const contentType = resp.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) {
-                const textPreview = await resp.text();
-                if (textPreview.trim().startsWith("<!DOCTYPE") || textPreview.trim().startsWith("<html")) {
-                    throw new Error("The Worker returned HTML. Your Cloudflare 'Functions' routing might still be initializing or the path is incorrect.");
+        for (let url of endpoints) {
+            try {
+                console.log("Checking endpoint:", url);
+                const resp = await fetch(url, { 
+                    method: 'GET', 
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-cache' 
+                });
+
+                if (!resp.ok) {
+                    failedEndpoints.push(`${url} (${resp.status})`);
+                    continue;
                 }
-                throw new Error("The Worker returned an unexpected format (not JSON).");
+
+                const contentType = resp.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    failedEndpoints.push(`${url} (Returned HTML/Text)`);
+                    continue;
+                }
+
+                const data = await resp.json();
+                if (data.error) throw new Error(data.error);
+
+                mangaData = (data.results || []).map(page => ({
+                    id: page.id,
+                    name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
+                    status: page.properties.Status?.select?.name || "Plan to Read",
+                    ch: page.properties.Chapters?.number || 0 
+                }));
+
+                syncText.innerText = `✨ ${mangaData.length} items synced`;
+                render();
+                return; // Success! Exit the loop.
+            } catch (err) {
+                lastError = err.message;
+                failedEndpoints.push(`${url} (Fetch Error)`);
+                console.warn(`Path ${url} failed:`, err);
             }
+        }
 
-            const data = await resp.json();
-            if (data.error) throw new Error(data.error);
-
-            mangaData = (data.results || []).map(page => ({
-                id: page.id,
-                name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
-                status: page.properties.Status?.select?.name || "Plan to Read",
-                ch: page.properties.Chapters?.number || 0 
-            }));
-
-            syncText.innerText = `✨ ${mangaData.length} items synced`;
-            render();
-        } catch (err) {
-            console.error("Detailed Fetch Error:", err);
-            grid.innerHTML = `
-                <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
-                    <p class="text-red-800 font-bold mb-1">Connection Refused (CORS or Deployment)</p>
-                    <p class="text-red-600 text-xs mb-4 italic">${err.message}</p>
-                    
-                    <div class="bg-white p-4 rounded border border-red-100 text-[10px] text-stone-600 space-y-2">
-                        <p><b>1. Deployment Check:</b> If you just pushed the CORS fix to GitHub, wait 60 seconds for Cloudflare to finish building.</p>
-                        <p><b>2. Manual Test:</b> Click <a href="${WORKER_URL}" target="_blank" class="text-blue-600 underline">this link</a>. If it works there but fails here, the Worker still needs the <code>OPTIONS</code> handler update we discussed.</p>
-                        <p><b>3. Browser Refresh:</b> Sometimes the browser caches the "Failed" state. Try refreshing this entire page.</p>
+        // If we get here, all endpoints failed
+        grid.innerHTML = `
+            <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
+                <p class="text-red-800 font-bold mb-1">Archive Connection Refused</p>
+                <p class="text-red-600 text-xs mb-4 italic">Reason: ${lastError || "Path Discovery Failed"}</p>
+                
+                <div class="mt-4 bg-white p-4 rounded border border-red-100 text-[10px] text-stone-600 space-y-3">
+                    <p class="font-bold border-b pb-1">Connection Diagnostics:</p>
+                    <ul class="list-disc pl-4 space-y-1">
+                        ${failedEndpoints.map(e => `<li>Attempted: <code class="bg-gray-100 px-1">${e}</code></li>`).join('')}
+                    </ul>
+                    <div class="pt-2 border-t space-y-2">
+                        <p><b>Routing Mismatch:</b> Your Cloudflare site is returning HTML for API requests. This means your <code>/functions</code> folder isn't being picked up by the build process.</p>
+                        <p><b>GitHub Folder Check:</b> Ensure the <code>functions</code> folder is in the <b>exact same folder</b> as your <code>index.html</code> in GitHub.</p>
+                        <p><b>Dashboard Check:</b> In Cloudflare Pages, go to <b>Settings > Functions</b>. Make sure there isn't a "Routing" error listed there.</p>
+                        <p><b>Direct Test:</b> Open <a href="${WORKER_BASE}/index" target="_blank" class="text-blue-600 underline">${WORKER_BASE}/index</a>. If it's a white page with JSON text, the error is Cloudflare setup. If it's your website again, the code isn't deployed to that URL.</p>
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        `;
     }
 
     function render(data = mangaData) {
