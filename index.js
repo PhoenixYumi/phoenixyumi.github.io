@@ -1,59 +1,54 @@
-export async function onRequest(context) {
-  const { env, request } = context;
-  
-  // 1. Define CORS Headers
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, Notion-Version",
-    "Access-Control-Max-Age": "86400",
-  };
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
 
-  // 2. Handle Preflight (OPTIONS) requests - CRITICAL for "Failed to fetch"
-  if (request.method === "OPTIONS") {
-    return new Response(null, { 
-      status: 204, 
-      headers: corsHeaders 
-    });
-  }
+    // 1. ROUTING: If the path is /api, run the Notion logic
+    if (url.pathname === "/api" || url.pathname === "/index") {
+      
+      // Handle CORS Preflight (important for browsers)
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept",
+          },
+        });
+      }
 
-  try {
-    const token = env.NOTION_TOKEN;
-    const dbId = env.DATABASE_ID;
+      try {
+        const response = await fetch(`https://api.notion.com/v1/databases/${env.DATABASE_ID}/query`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.NOTION_TOKEN}`,
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            page_size: 100,
+            sorts: [{ property: "Name", direction: "ascending" }]
+          }),
+        });
 
-    if (!token || !dbId) {
-      return new Response(JSON.stringify({ 
-        error: "Secrets missing. Set NOTION_TOKEN and DATABASE_ID in Cloudflare." 
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+        const data = await response.json();
+        
+        return new Response(JSON.stringify(data), {
+          headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*" 
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
     }
 
-    // 3. Fetch from Notion
-    const notionResponse = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-      },
-    });
-
-    const data = await notionResponse.json();
-
-    // 4. Return Data with CORS headers
-    return new Response(JSON.stringify(data), {
-      headers: { 
-        ...corsHeaders, 
-        "Content-Type": "application/json" 
-      }
-    });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-}
+    // 2. FALLBACK: If it's not an API call, serve the static assets (index.html)
+    // Cloudflare Workers with Assets automatically does this if we return nothing 
+    // or if the assets fetcher is called.
+    return env.ASSETS.fetch(request);
+  },
+};
