@@ -1,5 +1,3 @@
-# phoenixyumi.github.io
-manga archive
 <!DOCTYPE html>
 <html lang="en">
 <head>
