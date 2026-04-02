@@ -1,15 +1,20 @@
 export async function onRequest(context) {
   const { env, request } = context;
   
+  // 1. Define CORS Headers
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Notion-Version",
+    "Access-Control-Max-Age": "86400",
   };
 
-  // Handle Preflight
+  // 2. Handle Preflight (OPTIONS) requests - CRITICAL for "Failed to fetch"
   if (request.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -18,13 +23,14 @@ export async function onRequest(context) {
 
     if (!token || !dbId) {
       return new Response(JSON.stringify({ 
-        error: "Secrets not found. Check NOTION_TOKEN and DATABASE_ID in Cloudflare Settings." 
+        error: "Secrets missing. Set NOTION_TOKEN and DATABASE_ID in Cloudflare." 
       }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
+    // 3. Fetch from Notion
     const notionResponse = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
       method: "POST",
       headers: {
@@ -36,6 +42,7 @@ export async function onRequest(context) {
 
     const data = await notionResponse.json();
 
+    // 4. Return Data with CORS headers
     return new Response(JSON.stringify(data), {
       headers: { 
         ...corsHeaders, 
