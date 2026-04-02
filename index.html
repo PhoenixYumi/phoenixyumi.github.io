@@ -8,57 +8,37 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root {
---beige: #F5F5DC; --tan: #D2B48C; --oak: #8B4513;
---deep-brown: #3E2723; --paper: #FDFBF7;
-}
-body { background-color: var(--paper); color: var(--deep-brown); font-family: 'Georgia', serif; margin: 0; padding: 0; }
-.library-card { background: #FFFFFF; border: 1px solid var(--tan); box-shadow: 0 2px 4px rgba(62,39,35,0.05); border-radius: 0.5rem; transition: all 0.2s ease; position: relative; }
-.library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 8px rgba(62,39,35,0.1); }
-.shelf-header { border-bottom: 3px solid var(--oak); }
+:root { --beige: #F5F5DC; --tan: #D2B48C; --oak: #8B4513; --paper: #FDFBF7; }
+body { background-color: var(--paper); color: #3E2723; font-family: 'Georgia', serif; }
+.library-card { background: white; border: 1px solid var(--tan); border-radius: 0.5rem; transition: all 0.2s ease; }
+.library-card:hover { transform: translateY(-2px); border-color: var(--oak); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
 .status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; }
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--paper); }
-::-webkit-scrollbar-thumb { background: var(--tan); border-radius: 4px; }
-.btn-oak { background-color: var(--oak); color: white; transition: opacity 0.2s; }
-.btn-oak:hover { opacity: 0.9; }
 </style>
 </head>
 <body class="p-4">
 
 <div class="max-w-5xl mx-auto">
-<header class="mb-6 pb-4 shelf-header flex justify-between items-center">
+<header class="mb-6 pb-4 border-b-2 border-oak flex justify-between items-center">
 <div>
-<h1 class="text-2xl md:text-3xl font-bold">RetroNebula's Archive</h1>
-<p class="text-xs italic text-gray-600">✨ Syncing with Notion Archives</p>
+<h1 class="text-2xl font-bold">RetroNebula's Archive</h1>
+<p class="text-xs italic text-gray-500">Live Notion Sync</p>
 </div>
-<div class="flex gap-2">
-<button onclick="loadFromNotion()" class="btn-oak px-4 py-2 rounded text-sm font-bold shadow-sm">🔄 Refresh Library</button>
-</div>
+<button onclick="loadFromNotion()" class="bg-stone-800 text-white px-4 py-2 rounded text-sm font-bold shadow-sm hover:bg-stone-700">🔄 Refresh</button>
 </header>
 
 <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
-    <aside class="md:col-span-4 space-y-6">
+    <aside class="md:col-span-4">
         <div class="bg-white p-4 rounded-lg border border-tan shadow-sm">
             <h2 class="text-sm font-bold mb-3">📊 Library Stats</h2>
-            <div style="height: 200px;"><canvas id="statusChart"></canvas></div>
-            <p class="text-[10px] mt-4 text-center text-gray-400 italic">Data pulled from your Notion Database</p>
+            <div style="height: 180px;"><canvas id="statusChart"></canvas></div>
         </div>
     </aside>
-
     <main class="md:col-span-8">
-        <div class="flex flex-wrap gap-2 mb-4">
-            <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." class="flex-grow outline-none border border-tan rounded p-2 text-sm">
-            <select id="statusFilter" onchange="handleFilter()" class="outline-none border border-tan rounded p-2 text-sm bg-white">
-                <option value="all">All Statuses</option>
-                <option value="reading">Reading</option>
-                <option value="read">Completed</option>
-                <option value="want to read">Plan to Read</option>
-                <option value="stalled">On Hold</option>
-            </select>
+        <div class="mb-4 flex gap-2">
+            <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search archive..." class="flex-grow border border-tan rounded p-2 text-sm outline-none">
         </div>
         <div id="mangaGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 h-[600px] overflow-y-auto pr-2">
-            <!-- Data loads here -->
+            <!-- Data will load here -->
         </div>
     </main>
 </div>
@@ -72,18 +52,15 @@ let mangaData = [];
 let chartInstance = null;
 
 async function loadFromNotion() {
-    const grid = document.getElementById(&#39;mangaGrid&#39;);
-    grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 animate-pulse text-oak&quot;&gt;📚 Consulting the Notion Archives...&lt;/div&gt;&#39;;
+    const grid = document.getElementById(&quot;mangaGrid&quot;);
+    grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 animate-pulse text-oak italic&quot;&gt;📚 Consulting the Notion Archives...&lt;/div&gt;&#39;;
 
     try {
         const resp = await fetch(PROXY_URL);
         const data = await resp.json();
         
-        if (data.error || !data.results) {
-            throw new Error(data.error || &quot;No data received&quot;);
-        }
+        if (data.error) throw new Error(data.error);
 
-        // Map Notion properties to our display format
         mangaData = data.results.map(page =&gt; ({
             id: page.id,
             name: page.properties.Name?.title[0]?.plain_text || &quot;Untitled&quot;,
@@ -93,97 +70,59 @@ async function loadFromNotion() {
 
         render();
     } catch (err) {
-        console.error(&quot;Connection Error:&quot;, err);
-        grid.innerHTML = `
-            &lt;div class=&quot;col-span-full text-center py-20 text-red-700 bg-red-50 rounded-lg border border-red-200 px-4&quot;&gt;
-                &lt;p class=&quot;font-bold&quot;&gt;Archives Connection Failed&lt;/p&gt;
-                &lt;p class=&quot;text-xs mt-2 italic&quot;&gt;1. Ensure Notion Integration is connected to your DB.&lt;/p&gt;
-                &lt;p class=&quot;text-xs mt-1 italic&quot;&gt;2. Ensure Cloudflare Settings has your Token &amp; Database ID.&lt;/p&gt;
-                &lt;p class=&quot;text-xs mt-1 italic font-mono bg-white/50 p-1 rounded inline-block&quot;&gt;Error: ${err.message}&lt;/p&gt;
-            &lt;/div&gt;
-        `;
+        console.error(&quot;Notion Error:&quot;, err);
+        grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 text-red-700&quot;&gt;Connection Failed. Check Cloudflare secrets and Notion connection.&lt;/div&gt;&#39;;
     }
 }
 
 function render(data = mangaData) {
-    const grid = document.getElementById(&#39;mangaGrid&#39;);
-    grid.innerHTML = &#39;&#39;;
+    const grid = document.getElementById(&quot;mangaGrid&quot;);
+    grid.innerHTML = &quot;&quot;;
     
-    if (data.length === 0) {
-        grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 opacity-50 italic&quot;&gt;No titles found in this view.&lt;/div&gt;&#39;;
-        return;
-    }
-
     data.sort((a, b) =&gt; a.name.localeCompare(b.name)).forEach(m =&gt; {
-        const card = document.createElement(&#39;div&#39;);
-        card.className = &#39;library-card p-4 flex flex-col justify-between h-36&#39;;
+        const card = document.createElement(&quot;div&quot;);
+        card.className = &quot;library-card p-4 flex flex-col justify-between h-32&quot;;
         card.innerHTML = `
             &lt;div&gt;
-                &lt;div class=&quot;flex justify-between items-start mb-2&quot;&gt;
-                    &lt;span class=&quot;status-pill ${getStatusClass(m.status)}&quot;&gt;${m.status}&lt;/span&gt;
-                &lt;/div&gt;
-                &lt;h3 class=&quot;font-bold text-base leading-tight line-clamp-2&quot;&gt;${m.name}&lt;/h3&gt;
+                &lt;span class=&quot;status-pill bg-stone-100 text-stone-600&quot;&gt;${m.status}&lt;/span&gt;
+                &lt;h3 class=&quot;font-bold text-sm mt-2&quot;&gt;${m.name}&lt;/h3&gt;
             &lt;/div&gt;
-            &lt;div class=&quot;text-[11px] text-gray-500 italic border-t border-tan/20 pt-2 flex justify-between&quot;&gt;
-                &lt;span&gt;Progress&lt;/span&gt;
-                &lt;span class=&quot;font-bold text-oak&quot;&gt;Ch. ${m.ch}&lt;/span&gt;
-            &lt;/div&gt;
+            &lt;div class=&quot;text-[11px] text-gray-400 border-t border-gray-100 pt-2 italic&quot;&gt;Progress: Ch. ${m.ch}&lt;/div&gt;
         `;
         grid.appendChild(card);
     });
     updateChart();
 }
 
-function getStatusClass(s) {
-    const st = s?.toLowerCase() || &#39;&#39;;
-    if (st.includes(&#39;reading&#39;)) return &#39;bg-blue-100 text-blue-800&#39;;
-    if (st.includes(&#39;read&#39;) || st.includes(&#39;completed&#39;)) return &#39;bg-green-100 text-green-800&#39;;
-    if (st.includes(&#39;stalled&#39;) || st.includes(&#39;hold&#39;)) return &#39;bg-yellow-100 text-yellow-800&#39;;
-    return &#39;bg-gray-100 text-gray-600&#39;;
-}
-
 function handleSearch() {
-    const term = document.getElementById(&#39;searchInput&#39;).value.toLowerCase();
+    const term = document.getElementById(&quot;searchInput&quot;).value.toLowerCase();
     render(mangaData.filter(m =&gt; m.name.toLowerCase().includes(term)));
 }
 
-function handleFilter() {
-    const val = document.getElementById(&#39;statusFilter&#39;).value.toLowerCase();
-    render(val === &#39;all&#39; ? mangaData : mangaData.filter(m =&gt; m.status.toLowerCase().includes(val)));
-}
-
 function updateChart() {
-    const ctx = document.getElementById(&#39;statusChart&#39;).getContext(&#39;2d&#39;);
+    const ctx = document.getElementById(&quot;statusChart&quot;).getContext(&quot;2d&quot;);
     const stats = mangaData.reduce((acc, m) =&gt; { 
-        const s = (m.status || &#39;Other&#39;).toLowerCase();
+        const s = m.status || &quot;Other&quot;;
         acc[s] = (acc[s] || 0) + 1; 
         return acc; 
     }, {});
     
-    const labels = Object.keys(stats).map(s =&gt; s.charAt(0).toUpperCase() + s.slice(1));
-    const values = Object.values(stats);
-
     if(chartInstance) chartInstance.destroy();
     chartInstance = new Chart(ctx, {
-        type: &#39;doughnut&#39;,
+        type: &quot;doughnut&quot;,
         data: {
-            labels: labels,
+            labels: Object.keys(stats),
             datasets: [{
-                data: values,
-                backgroundColor: [&#39;#AAD9BB&#39;, &#39;#80BCBD&#39;, &#39;#F9F7C9&#39;, &#39;#D5F0C1&#39;, &#39;#E5E7EB&#39;],
-                borderColor: &#39;#3E2723&#39;, borderWidth: 1
+                data: Object.values(stats),
+                backgroundColor: [&quot;#AAD9BB&quot;, &quot;#80BCBD&quot;, &quot;#F9F7C9&quot;, &quot;#D5F0C1&quot;, &quot;#E5E7EB&quot;],
+                borderWidth: 1
             }]
         },
-        options: { 
-            responsive: true, maintainAspectRatio: false,
-            plugins: { 
-                legend: { position: &#39;bottom&#39;, labels: { font: { size: 10, family: &#39;Georgia&#39; }, boxWidth: 12 } } 
-            }
-        }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: &quot;bottom&quot;, labels: { boxWidth: 10, font: { size: 9 } } } } }
     });
 }
 
-document.addEventListener(&#39;DOMContentLoaded&#39;, loadFromNotion);
+document.addEventListener(&quot;DOMContentLoaded&quot;, loadFromNotion);
 
 
 </script>
