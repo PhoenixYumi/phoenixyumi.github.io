@@ -54,8 +54,8 @@
 </div>
 
 <script>
-    // Configuration
-    const WORKER_BASE = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev";
+    // This is your dedicated Worker URL from the screenshot
+    const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
     
     let mangaData = [];
     let chartInstance = null;
@@ -70,82 +70,52 @@
                 <div class="italic text-sm">Consulting the Notion Archives...</div>
             </div>`;
 
-        // Try these paths in order
-        const endpoints = ["/index", "/api/index", `${WORKER_BASE}/index`];
-        let lastError = "";
-        let failedEndpoints = [];
+        try {
+            // Force fetch from the Worker directly
+            const resp = await fetch(WORKER_URL, { 
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
 
-        for (let url of endpoints) {
-            try {
-                console.log("Checking endpoint:", url);
-                const resp = await fetch(url, { 
-                    method: 'GET', 
-                    headers: { 'Accept': 'application/json' },
-                    cache: 'no-cache' 
-                });
+            if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
 
-                if (!resp.ok) {
-                    failedEndpoints.push(`${url} (${resp.status})`);
-                    continue;
-                }
-
-                const contentType = resp.headers.get("content-type");
-                if (!contentType || !contentType.includes("application/json")) {
-                    failedEndpoints.push(`${url} (Returned HTML/Text)`);
-                    continue;
-                }
-
-                const data = await resp.json();
-                if (data.error) throw new Error(data.error);
-
-                mangaData = (data.results || []).map(page => ({
-                    id: page.id,
-                    name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
-                    status: page.properties.Status?.select?.name || "Plan to Read",
-                    ch: page.properties.Chapters?.number || 0 
-                }));
-
-                syncText.innerText = `✨ ${mangaData.length} items synced`;
-                render();
-                return; // Success! Exit the loop.
-            } catch (err) {
-                lastError = err.message;
-                failedEndpoints.push(`${url} (Fetch Error)`);
-                console.warn(`Path ${url} failed:`, err);
+            const contentType = resp.headers.get("content-type") || "";
+            if (!contentType.includes("application/json")) {
+                throw new Error("Worker returned HTML/Text. Check if your Worker script is deployed correctly.");
             }
-        }
 
-        // If we get here, all endpoints failed
-        grid.innerHTML = `
-            <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
-                <p class="text-red-800 font-bold mb-1">Archive Connection Refused</p>
-                <p class="text-red-600 text-xs mb-4 italic">Reason: ${lastError || "Path Discovery Failed"}</p>
-                
-                <div class="mt-4 bg-white p-4 rounded border border-red-100 text-[10px] text-stone-600 space-y-3">
-                    <p class="font-bold border-b pb-1">Connection Diagnostics:</p>
-                    <ul class="list-disc pl-4 space-y-1">
-                        ${failedEndpoints.map(e => `<li>Attempted: <code class="bg-gray-100 px-1">${e}</code></li>`).join('')}
-                    </ul>
-                    <div class="pt-2 border-t space-y-2">
-                        <p><b>Routing Mismatch:</b> Your Cloudflare site is returning HTML for API requests. This means your <code>/functions</code> folder isn't being picked up by the build process.</p>
-                        <p><b>GitHub Folder Check:</b> Ensure the <code>functions</code> folder is in the <b>exact same folder</b> as your <code>index.html</code> in GitHub.</p>
-                        <p><b>Dashboard Check:</b> In Cloudflare Pages, go to <b>Settings > Functions</b>. Make sure there isn't a "Routing" error listed there.</p>
-                        <p><b>Direct Test:</b> Open <a href="${WORKER_BASE}/index" target="_blank" class="text-blue-600 underline">${WORKER_BASE}/index</a>. If it's a white page with JSON text, the error is Cloudflare setup. If it's your website again, the code isn't deployed to that URL.</p>
+            const data = await resp.json();
+            if (data.error) throw new Error(data.error);
+
+            mangaData = (data.results || []).map(page => ({
+                id: page.id,
+                name: page.properties.Name?.title[0]?.plain_text || "Untitled Entry",
+                status: page.properties.Status?.select?.name || "Plan to Read",
+                ch: page.properties.Chapters?.number || 0 
+            }));
+
+            syncText.innerText = `✨ ${mangaData.length} items synced`;
+            render();
+        } catch (err) {
+            console.error(err);
+            grid.innerHTML = `
+                <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
+                    <p class="text-red-800 font-bold mb-1">Connection Failed</p>
+                    <p class="text-red-600 text-xs mb-4 italic">${err.message}</p>
+                    <div class="bg-white p-3 rounded text-[10px] text-gray-500">
+                        <b>Troubleshooting:</b><br>
+                        1. Visit <a href="${WORKER_URL}" target="_blank" class="underline text-blue-500">this link</a>. If you see your website again, the Worker is not running the Notion script.<br>
+                        2. Ensure <code>NOTION_TOKEN</code> is in the "Variables" tab of your Worker settings.
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+        }
     }
 
     function render(data = mangaData) {
         const grid = document.getElementById("mangaGrid");
         grid.innerHTML = "";
         
-        if (data.length === 0) {
-            grid.innerHTML = '<div class="col-span-full text-center py-20 text-stone-400 italic">No matches found.</div>';
-            return;
-        }
-
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
             const card = document.createElement("div");
             card.className = "library-card p-4 flex flex-col justify-between h-40 " + getBorder(m.status);
@@ -186,9 +156,7 @@
     }
 
     function updateChart() {
-        const canvas = document.getElementById("statusChart");
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
+        const ctx = document.getElementById("statusChart").getContext("2d");
         const stats = mangaData.reduce((acc, m) => { 
             const s = m.status || "Other";
             acc[s] = (acc[s] || 0) + 1; 
@@ -202,20 +170,13 @@
                 labels: Object.keys(stats),
                 datasets: [{
                     data: Object.values(stats),
-                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB", "#D2B48C"],
-                    borderWidth: 2, 
-                    borderColor: "#fff"
+                    backgroundColor: ["#80BCBD", "#AAD9BB", "#D5F0C1", "#F9F7C9", "#E5E7EB", "#D2B48C"]
                 }]
             },
             options: { 
                 responsive: true, 
                 maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { 
-                        position: "bottom", 
-                        labels: { boxWidth: 8, padding: 15, font: { size: 10, family: "Georgia" } } 
-                    } 
-                },
+                plugins: { legend: { position: "bottom", labels: { font: { size: 10 } } } },
                 cutout: "70%"
             }
         });
