@@ -113,37 +113,111 @@
 </div>
 
 <script>
-    // This is your new Cloudflare URL from your screenshot
-    const PROXY_URL = "/index"; 
-    let mangaData = [];
+// This tells the browser to look at your Cloudflare Function
+const PROXY_URL = "/index";
+let mangaData = [];
+let chartInstance = null;
 
-    async function loadFromNotion() {
-        const grid = document.getElementById('mangaGrid');
-        grid.innerHTML = '<div class="col-span-full text-center py-20 animate-pulse">📚 Opening the Notion Archives...</div>';
+async function loadFromNotion() {
+    const grid = document.getElementById(&#39;mangaGrid&#39;);
+    grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 animate-pulse text-oak&quot;&gt;📚 Consultng the Notion Archives...&lt;/div&gt;&#39;;
 
-        try {
-            const resp = await fetch(PROXY_URL);
-            const data = await resp.json();
-            
-            // This part converts Notion's data into your library cards
-            mangaData = data.results.map(page => ({
-                id: page.id,
-                // Make sure these match your Notion column names!
-                name: page.properties.Name?.title[0]?.plain_text || "Untitled",
-                status: page.properties.Status?.select?.name || "want to read",
-                ch: page.properties.Chapters?.number || 0
-            }));
-
-            render();
-        } catch (err) {
-            console.error(err);
-            grid.innerHTML = `<div class="col-span-full text-center py-20 text-red-600">Failed to connect to Notion Archives.</div>`;
+    try {
+        const resp = await fetch(PROXY_URL);
+        const data = await resp.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
         }
+
+        // Maps Notion&#39;s data structure to our Archive layout
+        mangaData = data.results.map(page =&gt; ({
+            id: page.id,
+            name: page.properties.Name?.title[0]?.plain_text || &quot;Untitled&quot;,
+            status: page.properties.Status?.select?.name || &quot;want to read&quot;,
+            ch: page.properties.Chapters?.number || 0
+        }));
+
+        render();
+    } catch (err) {
+        console.error(&quot;Connection Error:&quot;, err);
+        grid.innerHTML = `
+            &lt;div class=&quot;col-span-full text-center py-20 text-red-700 bg-red-50 rounded-lg border border-red-200&quot;&gt;
+                &lt;p class=&quot;font-bold&quot;&gt;Archives Connection Failed&lt;/p&gt;
+                &lt;p class=&quot;text-xs mt-2 italic&quot;&gt;Ensure NOTION_TOKEN and DATABASE_ID are set in Cloudflare Settings.&lt;/p&gt;
+            &lt;/div&gt;
+        `;
+    }
+}
+
+function render(data = mangaData) {
+    const grid = document.getElementById(&#39;mangaGrid&#39;);
+    grid.innerHTML = &#39;&#39;;
+    
+    if (data.length === 0) {
+        grid.innerHTML = &#39;&lt;div class=&quot;col-span-full text-center py-20 opacity-50 italic&quot;&gt;No titles found in your Notion database.&lt;/div&gt;&#39;;
+        return;
     }
 
-    // ... (Keep the render, getStatusClass, and updateChart functions from the previous versions)
+    data.sort((a, b) =&gt; a.name.localeCompare(b.name)).forEach(m =&gt; {
+        const card = document.createElement(&#39;div&#39;);
+        card.className = &#39;library-card p-3 flex flex-col justify-between h-32&#39;;
+        card.innerHTML = `
+            &lt;div&gt;
+                &lt;div class=&quot;flex justify-between items-start mb-1&quot;&gt;
+                    &lt;span class=&quot;status-pill ${getStatusClass(m.status)}&quot;&gt;${m.status}&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;h3 class=&quot;font-bold text-sm leading-tight line-clamp-2&quot;&gt;${m.name}&lt;/h3&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;text-[10px] text-gray-400 italic border-t border-tan/20 pt-1&quot;&gt;
+                Progress: Ch. ${m.ch}
+            &lt;/div&gt;
+        `;
+        grid.appendChild(card);
+    });
+    updateChart();
+}
 
-    document.addEventListener('DOMContentLoaded', loadFromNotion);
+function getStatusClass(s) {
+    const st = s?.toLowerCase() || &#39;&#39;;
+    if (st.includes(&#39;reading&#39;)) return &#39;bg-blue-100 text-blue-800&#39;;
+    if (st.includes(&#39;read&#39;) || st.includes(&#39;completed&#39;)) return &#39;bg-green-100 text-green-800&#39;;
+    if (st.includes(&#39;stalled&#39;) || st.includes(&#39;hold&#39;)) return &#39;bg-yellow-100 text-yellow-800&#39;;
+    return &#39;bg-gray-100 text-gray-600&#39;;
+}
+
+function updateChart() {
+    const ctx = document.getElementById(&#39;statusChart&#39;).getContext(&#39;2d&#39;);
+    const stats = mangaData.reduce((acc, m) =&gt; { 
+        const s = (m.status || &#39;unknown&#39;).toLowerCase();
+        acc[s] = (acc[s] || 0) + 1; 
+        return acc; 
+    }, {});
+    
+    const labels = Object.keys(stats).map(s =&gt; s.charAt(0).toUpperCase() + s.slice(1));
+    const values = Object.values(stats);
+
+    if(chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(ctx, {
+        type: &#39;doughnut&#39;,
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: [&#39;#AAD9BB&#39;, &#39;#80BCBD&#39;, &#39;#F9F7C9&#39;, &#39;#D5F0C1&#39;, &#39;#E5E7EB&#39;],
+                borderColor: &#39;#3E2723&#39;, borderWidth: 1
+            }]
+        },
+        options: { 
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: &#39;right&#39;, labels: { font: { size: 9, family: &#39;Georgia&#39; } } } }
+        }
+    });
+}
+
+document.addEventListener(&#39;DOMContentLoaded&#39;, loadFromNotion);
+
+
 </script>
 </body>
 </html>
