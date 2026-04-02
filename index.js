@@ -2,10 +2,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Handle Notion API requests
     if (url.pathname === "/api") {
-      
-      // Handle CORS Preflight for the browser
       if (request.method === "OPTIONS") {
         return new Response(null, {
           headers: {
@@ -17,6 +14,8 @@ export default {
       }
 
       try {
+        console.log("Fetching from Notion Database:", env.DATABASE_ID);
+        
         const response = await fetch(`https://api.notion.com/v1/databases/${env.DATABASE_ID}/query`, {
           method: "POST",
           headers: {
@@ -25,13 +24,18 @@ export default {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            page_size: 100,
-            sorts: [{ property: "Name", direction: "ascending" }]
+            page_size: 100
           }),
         });
 
         const data = await response.json();
         
+        // Log the response size to see if Notion is actually returning items
+        console.log("Notion returned items count:", data.results?.length || 0);
+        if (data.object === "error") {
+          console.error("Notion API Error:", data.message);
+        }
+
         return new Response(JSON.stringify(data), {
           headers: { 
             "Content-Type": "application/json",
@@ -39,17 +43,14 @@ export default {
           },
         });
       } catch (err) {
+        console.error("Worker Catch Error:", err.message);
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: { 
-            "Content-Type": "application/json", 
-            "Access-Control-Allow-Origin": "*" 
-          },
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
     }
 
-    // Serve static assets from the /public folder
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
