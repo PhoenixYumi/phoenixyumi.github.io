@@ -1,28 +1,53 @@
 export async function onRequest(context) {
   const { env } = context;
   
-  // These pull from the "Environment Variables" we are about to set
-  const NOTION_TOKEN = env.NOTION_TOKEN;
-  const DATABASE_ID = env.DATABASE_ID;
+  // 1. Define CORS headers
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Notion-Version",
+  };
 
-  const response = await fetch(`https://api.notion.com/v1/databases/${DATABASE_ID}/query`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${NOTION_TOKEN}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
-    },
-  });
+  // 2. Handle Preflight (OPTIONS) requests - Browsers send this first to check permissions
+  if (context.request.method === "OPTIONS") {
+    return new Response(null, {
+      headers: corsHeaders,
+    });
+  }
 
-  const data = await response.json();
+  const token = env.NOTION_TOKEN;
+  const dbId = env.DATABASE_ID;
 
-  return new Response(JSON.stringify(data), {
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "*"
-    },
-  });
+  if (!token || !dbId) {
+    return new Response(JSON.stringify({ error: "Missing API Keys in Cloudflare Settings" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+
+  try {
+    const response = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+
+    // 3. Return the Notion data with CORS headers
+    return new Response(JSON.stringify(data), {
+      headers: { 
+        ...corsHeaders,
+        "Content-Type": "application/json" 
+      }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: corsHeaders
+    });
+  }
 }
-
