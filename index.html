@@ -113,202 +113,37 @@
 </div>
 
 <script>
-    // Initialize data from LocalStorage
-    let mangaData = JSON.parse(localStorage.getItem('retroArchive')) || [];
-    let chartInstance = null;
+    // This is your new Cloudflare URL from your screenshot
+    const PROXY_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev"; 
+    let mangaData = [];
 
-    function render(data = mangaData) {
+    async function loadFromNotion() {
         const grid = document.getElementById('mangaGrid');
-        
-        if (!data.length) {
-            grid.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center h-64 opacity-60">
-                    <p class="text-sm italic mb-2">Your archive is currently empty.</p>
-                    <button onclick="openImport()" class="text-xs text-oak underline">Import your JSON file to begin</button>
-                </div>
-            `;
-            updateChart();
-            return;
-        }
-
-        grid.innerHTML = '';
-        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(m => {
-            const card = document.createElement('div');
-            card.className = 'library-card p-3 flex flex-col justify-between h-32';
-            card.innerHTML = `
-                <div>
-                    <div class="flex justify-between items-start mb-1">
-                        <span class="status-pill ${getStatusClass(m.status)}">${m.status}</span>
-                        <button onclick="openForm('${m.id}')" class="text-xs opacity-20 hover:opacity-100 p-1">⚙️</button>
-                    </div>
-                    <h3 class="font-bold text-sm leading-tight line-clamp-2">${m.name}</h3>
-                </div>
-                <div class="text-[10px] text-gray-400 italic border-t border-tan/20 pt-1">
-                    Progress: Ch. ${m.ch || 0}
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-        updateChart();
-    }
-
-    function getStatusClass(s) {
-        const st = s.toLowerCase();
-        if (st === 'reading') return 'bg-blue-100 text-blue-800';
-        if (st === 'read' || st === 'completed') return 'bg-green-100 text-green-800';
-        if (st === 'stalled') return 'bg-yellow-100 text-yellow-800';
-        return 'bg-gray-100 text-gray-600';
-    }
-
-    function updateChart() {
-        const ctx = document.getElementById('statusChart').getContext('2d');
-        const stats = mangaData.reduce((acc, m) => { 
-            const s = m.status.toLowerCase();
-            acc[s] = (acc[s] || 0) + 1; 
-            return acc; 
-        }, {});
-        
-        const dataValues = [
-            stats.reading || 0, 
-            (stats.read || 0) + (stats.completed || 0), 
-            stats['want to read'] || 0, 
-            stats.stalled || 0
-        ];
-
-        if(chartInstance) chartInstance.destroy();
-        chartInstance = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Reading', 'Completed', 'Plan', 'Stalled'],
-                datasets: [{
-                    data: dataValues,
-                    backgroundColor: ['#AAD9BB', '#80BCBD', '#F9F7C9', '#D5F0C1'],
-                    borderColor: '#3E2723', borderWidth: 1
-                }]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10, family: 'Georgia' } } } 
-                } 
-            }
-        });
-    }
-
-    window.handleSave = (e) => {
-        e.preventDefault();
-        const id = document.getElementById('editId').value || Math.random().toString(36).substr(2, 9);
-        const entry = {
-            id,
-            name: document.getElementById('formName').value,
-            status: document.getElementById('formStatus').value,
-            ch: document.getElementById('formCh').value
-        };
-        
-        const index = mangaData.findIndex(m => m.id === id);
-        if(index > -1) mangaData[index] = entry;
-        else mangaData.push(entry);
-        
-        saveAndRefresh();
-        closeForm();
-    };
-
-    window.processImport = () => {
-        const text = document.getElementById('importArea').value;
-        if (!text.trim()) return;
+        grid.innerHTML = '<div class="col-span-full text-center py-20 animate-pulse">📚 Opening the Notion Archives...</div>';
 
         try {
-            const raw = JSON.parse(text);
-            const entries = raw.entries || raw;
+            const resp = await fetch(PROXY_URL);
+            const data = await resp.json();
             
-            if (!Array.isArray(entries)) throw new Error();
-
-            // Map keys from your export format to the app format
-            mangaData = entries.map(e => ({
-                id: Math.random().toString(36).substr(2, 9),
-                name: e.name || "Unknown Title",
-                status: (e.status || "want to read").toLowerCase(),
-                ch: e.ch || 0
+            // This part converts Notion's data into your library cards
+            mangaData = data.results.map(page => ({
+                id: page.id,
+                // Make sure these match your Notion column names!
+                name: page.properties.Name?.title[0]?.plain_text || "Untitled",
+                status: page.properties.Status?.select?.name || "want to read",
+                ch: page.properties.Chapters?.number || 0
             }));
-            
-            saveAndRefresh();
-            closeImport();
-            alert(`Loaded ${mangaData.length} titles successfully!`);
-        } catch (err) { 
-            alert("Error: Please paste the full text of your JSON export file."); 
-        }
-    };
 
-    function saveAndRefresh() {
-        localStorage.setItem('retroArchive', JSON.stringify(mangaData));
-        render();
+            render();
+        } catch (err) {
+            console.error(err);
+            grid.innerHTML = `<div class="col-span-full text-center py-20 text-red-600">Failed to connect to Notion Archives.</div>`;
+        }
     }
 
-    window.exportBackup = () => {
-        const blob = new Blob([JSON.stringify(mangaData, null, 2)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `RetroArchive_Backup_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-    };
+    // ... (Keep the render, getStatusClass, and updateChart functions from the previous versions)
 
-    window.openForm = (id) => {
-        document.getElementById('formModal').classList.remove('hidden');
-        document.getElementById('formModal').classList.add('flex');
-        if(id) {
-            const m = mangaData.find(x => x.id === id);
-            document.getElementById('editId').value = id;
-            document.getElementById('formName').value = m.name;
-            document.getElementById('formStatus').value = m.status;
-            document.getElementById('formCh').value = m.ch;
-            document.getElementById('deleteBtn').classList.remove('hidden');
-            document.getElementById('formTitle').innerText = "Edit Title";
-        } else {
-            document.getElementById('mangaForm').reset();
-            document.getElementById('editId').value = '';
-            document.getElementById('deleteBtn').classList.add('hidden');
-            document.getElementById('formTitle').innerText = "Add New Title";
-        }
-    };
-
-    window.handleDelete = () => {
-        const id = document.getElementById('editId').value;
-        if(confirm("Permanently remove this title from your archive?")) {
-            mangaData = mangaData.filter(m => m.id !== id);
-            saveAndRefresh();
-            closeForm();
-        }
-    };
-
-    window.handleSearch = () => {
-        const term = document.getElementById('searchInput').value.toLowerCase();
-        render(mangaData.filter(m => m.name.toLowerCase().includes(term)));
-    };
-
-    window.handleFilter = () => {
-        const val = document.getElementById('statusFilter').value;
-        render(val === 'all' ? mangaData : mangaData.filter(m => m.status.toLowerCase() === val));
-    };
-
-    window.closeForm = () => {
-        document.getElementById('formModal').classList.add('hidden');
-        document.getElementById('formModal').classList.remove('flex');
-    };
-    
-    window.openImport = () => {
-        document.getElementById('importModal').classList.remove('hidden');
-        document.getElementById('importModal').classList.add('flex');
-    };
-    
-    window.closeImport = () => {
-        document.getElementById('importModal').classList.add('hidden');
-        document.getElementById('importModal').classList.remove('flex');
-    };
-
-    // Run on load
-    document.addEventListener('DOMContentLoaded', () => render());
+    document.addEventListener('DOMContentLoaded', loadFromNotion);
 </script>
 </body>
 </html>
