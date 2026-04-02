@@ -30,6 +30,7 @@
     </header>
 
     <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <!-- Stats Sidebar -->
         <aside class="md:col-span-4">
             <div class="bg-white p-5 rounded-lg border border-tan shadow-sm sticky top-4">
                 <h2 class="text-sm font-bold mb-4 border-b border-stone-100 pb-2 flex items-center">
@@ -39,6 +40,7 @@
             </div>
         </aside>
 
+        <!-- Main Content -->
         <main class="md:col-span-8">
             <div class="mb-4 relative">
                 <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Search titles..." 
@@ -54,7 +56,12 @@
 </div>
 
 <script>
+    // Configuration
     const WORKER_URL = "https://phoenixyumi-github-io.phoenixyumi15.workers.dev/index";
+    
+    // Use relative path for production, absolute for preview
+    const isLocalPreview = window.location.hostname.includes("goog") || window.location.hostname === "";
+    const API_ENDPOINT = isLocalPreview ? WORKER_URL : "/index";
     
     let mangaData = [];
     let chartInstance = null;
@@ -70,9 +77,14 @@
             </div>`;
 
         try {
-            // "no-cache" helps ensure we aren't getting a stale 404
-            const resp = await fetch(WORKER_URL, {
+            console.log("Requesting data from:", API_ENDPOINT);
+            
+            const resp = await fetch(API_ENDPOINT, {
                 method: 'GET',
+                mode: 'cors', // Explicitly request CORS
+                headers: { 
+                    'Accept': 'application/json'
+                },
                 cache: 'no-cache'
             });
             
@@ -82,7 +94,11 @@
 
             const contentType = resp.headers.get("content-type");
             if (!contentType || !contentType.includes("application/json")) {
-                throw new Error("The Worker returned HTML instead of JSON. Deployment might still be in progress.");
+                const textPreview = await resp.text();
+                if (textPreview.trim().startsWith("<!DOCTYPE") || textPreview.trim().startsWith("<html")) {
+                    throw new Error("The Worker returned HTML. Your Cloudflare 'Functions' routing might still be initializing or the path is incorrect.");
+                }
+                throw new Error("The Worker returned an unexpected format (not JSON).");
             }
 
             const data = await resp.json();
@@ -98,16 +114,16 @@
             syncText.innerText = `✨ ${mangaData.length} items synced`;
             render();
         } catch (err) {
-            console.error("Fetch Error:", err);
+            console.error("Detailed Fetch Error:", err);
             grid.innerHTML = `
                 <div class="col-span-full p-8 bg-red-50 rounded-lg border border-red-200">
-                    <p class="text-red-800 font-bold mb-1">Failed to connect to Archive</p>
+                    <p class="text-red-800 font-bold mb-1">Connection Refused (CORS or Deployment)</p>
                     <p class="text-red-600 text-xs mb-4 italic">${err.message}</p>
                     
                     <div class="bg-white p-4 rounded border border-red-100 text-[10px] text-stone-600 space-y-2">
-                        <p><b>If you just updated GitHub:</b> Cloudflare takes 1-2 minutes to update. Refresh this page in a bit.</p>
-                        <p><b>Browser Security:</b> If you see "CORS" in your browser console, it means the worker isn't sending the right headers yet.</p>
-                        <p><b>Manual Check:</b> Open <a href="${WORKER_URL}" target="_blank" class="text-blue-600 underline">${WORKER_URL}</a>. If you see JSON there but not here, it's a CORS issue.</p>
+                        <p><b>1. Deployment Check:</b> If you just pushed the CORS fix to GitHub, wait 60 seconds for Cloudflare to finish building.</p>
+                        <p><b>2. Manual Test:</b> Click <a href="${WORKER_URL}" target="_blank" class="text-blue-600 underline">this link</a>. If it works there but fails here, the Worker still needs the <code>OPTIONS</code> handler update we discussed.</p>
+                        <p><b>3. Browser Refresh:</b> Sometimes the browser caches the "Failed" state. Try refreshing this entire page.</p>
                     </div>
                 </div>
             `;
@@ -142,7 +158,7 @@
     }
 
     function getPill(s) {
-        const st = s.toLowerCase();
+        const st = (s || "").toLowerCase();
         if (st.includes("reading")) return "bg-blue-100 text-blue-700";
         if (st.includes("read") || st.includes("complete")) return "bg-emerald-100 text-emerald-700";
         if (st.includes("stalled") || st.includes("hold")) return "bg-orange-100 text-orange-700";
@@ -150,7 +166,7 @@
     }
 
     function getBorder(s) {
-        const st = s.toLowerCase();
+        const st = (s || "").toLowerCase();
         if (st.includes("reading")) return "border-l-blue-400";
         if (st.includes("read") || st.includes("complete")) return "border-l-emerald-400";
         if (st.includes("stalled") || st.includes("hold")) return "border-l-orange-400";
