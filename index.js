@@ -2,9 +2,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Route for the Notion API
+    // Handle Notion API requests
     if (url.pathname === "/api") {
-      // Handle CORS for the browser
+      
+      // Handle CORS Preflight for the browser
       if (request.method === "OPTIONS") {
         return new Response(null, {
           headers: {
@@ -48,12 +49,11 @@ export default {
       }
     }
 
-    // Default: Try to serve static assets from the /public folder
+    // Serve static assets from the /public folder
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
 
-    // Fallback if assets are missing
     return new Response("Not Found", { status: 404 });
   },
 };
