@@ -1,4 +1,12 @@
-"assets": {
-    "directory": "public" 
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "phoenixyumi-github-io",
+  "main": "index.js",
+  "compatibility_date": "2025-09-27",
+  "assets": {
+    "directory": "public"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
 }
-4.  **Ensure `index.js`** (the one with the `fetch` and Notion logic) is in the root folder, **not** inside `public`.
